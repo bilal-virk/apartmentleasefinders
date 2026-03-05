@@ -1,8 +1,9 @@
-name: Generate & Update Changelog
+name: Auto Update Changelog
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main   # change if your branch is different
 
 concurrency:
   group: changelog-${{ github.ref }}
@@ -10,19 +11,18 @@ concurrency:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   update-changelog:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 🛠 Setup Git Identity
+      - name: Setup Git Identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -38,12 +38,11 @@ jobs:
         uses: requarks/changelog-action@v1
         with:
           token: ${{ github.token }}
-          tag: ${{ github.ref_name }}
           writeToFile: true
           includeInvalidCommits: false
           reverseOrder: true
 
-      - name:  Check for Changes
+      - name: Check for Changes
         id: git-check
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then
@@ -57,8 +56,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: |
-            docs(changelog): update for release ${{ github.ref_name }}
+            docs(changelog): auto-update
 
-            Auto-generated changelog for release ${{ github.ref_name }}.
-          branch: main
+            [skip ci]
           file_pattern: CHANGELOG.md
