@@ -20,3 +20,4 @@ testrun/*
 challenge.xlsx
 .env
 *.log
+test.ipynb
