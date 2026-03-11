@@ -1,3 +1,4 @@
+__pycache__/
 output/
 logs/
 venv/
@@ -18,3 +19,4 @@ testrun/*
 *.pkl
 challenge.xlsx
 .env
+*.log

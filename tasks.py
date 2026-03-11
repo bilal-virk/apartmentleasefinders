@@ -176,7 +176,7 @@ def smartapartment_insert_data():
     time.sleep(5)
     page.close()
 
-    requests.post(url="https://services.leadconnectorhq.com/hooks/QRof2UTEmQswZAiO7A6Q/webhook-trigger/87009a7f-269f-4c86-94b8-98904a296332",json=data)
+    requests.post(url="https://services.leadconnectorhq.com/hooks/QRof2UTEmQswZAiO7A6Q/webhook-trigger/87009a7f-269f-4c86-94b8-98904a296332",json=data) # Webhook to trigger automation on GoHighLevel "Update Stage to List Sent"
     
     # add functionality to close tab after sending email
     
