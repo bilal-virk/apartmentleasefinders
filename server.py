@@ -13,13 +13,13 @@ from dotenv import load_dotenv
 load_dotenv()
 import requests
 from utils import *
-
+from tasks import smartapartment_insert_data
 app = Flask(__name__)
 
 def delayed_robot_run(data, delay=1):
     """Run robot after given delay (default = 600s = 10min)."""
     print(f"[INFO] Robot scheduled to run in {delay/60} minutes...")
-    time.sleep(delay)
+    #time.sleep(delay)
 
     # Save data as Robocorp input file
     with open("client.json", "w") as f:
@@ -27,6 +27,7 @@ def delayed_robot_run(data, delay=1):
 
     # Run the robot
     subprocess.run(["rcc", "run", "-t", "smartapartment_insert_data"])
+    #smartapartment_insert_data()
     print("[OK] Robot run completed.")
 
 @app.route("/smartCreate", methods=["POST"])

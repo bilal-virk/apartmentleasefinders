@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from rapidfuzz import process, fuzz
 import re
-
+import traceback
 def normalize_location(text):
     """Normalize location strings for better fuzzy matching."""
     text = text.lower()                  # lowercase
@@ -101,6 +101,11 @@ def select_background_issues(page, issue):
     else:
         mapped_issue = issue
         id_selector = None
+    if mapped_issue is None or \
+   (isinstance(mapped_issue, str) and (mapped_issue.strip() == "" or 'none' in mapped_issue.lower())) or \
+   (isinstance(mapped_issue, list) and (len(mapped_issue) == 0 or any('none' in str(x).lower() for x in mapped_issue))):
+        print(f"[WARN] No mapping found for issue: {issue}")
+        return
 
     locator = page.locator(f"input[type='checkbox'][value='{mapped_issue}']")
     if locator.count() > 0:
@@ -124,23 +129,17 @@ def select_form_letter(page, letter_name: str):
     """
 
     # Step 1: Click dropdown input to expand options
+    xpath = f'//li[text()="{letter_name}"]'
     input_box = page.locator("#ctl00_ContentPlaceHolder_formLetter_Input")
     input_box.wait_for(state="visible", timeout=100000)
     input_box.click()
+    page.wait_for_selector(f'xpath={xpath}', timeout=10000)
+    option = page.locator(f'xpath={xpath}')
+    option.wait_for(state="visible", timeout=10000)
+    page.wait_for_timeout(500)
+    option.click()
+    print(f"[OK] Selected form letter: {letter_name}")
 
-    # Step 2: Wait for dropdown list to appear
-    options = page.locator("ul.rcbList li.rcbItem")
-    options.first.wait_for(state="visible", timeout=100000)
-
-    # Step 3: Try to select requested letter
-    option = options.filter(has_text=letter_name)
-    if option.count() > 0:
-        option.first.click()
-        print(f"[OK] Selected form letter: {letter_name}")
-    else:
-        # Fallback: pick the first available option
-        print(f"[WARN] Could not find form letter '{letter_name}', selecting first available.")
-        options.first.click()
 
 
 def regex_for_manager_name(text):
@@ -292,13 +291,13 @@ def select_properties(page,MAX_SELECT=20):
     properties = []
     for i in range(count):
         row = rows.nth(i)
-        rating_locator = row.locator('.//*[@class="review-rating"]')
+        rating_locator = row.locator('xpath=.//*[@class="review-rating"]')
         if rating_locator.count() > 0:
             rating_text = rating_locator.first.inner_text().strip()
             rating = extract_rating(rating_text)
         else:
             rating = 0.0 
-        class_locator = row.locator('.//*[contains(text(), "Class")]')
+        class_locator = row.locator('xpath=.//*[contains(text(), "Class")]')
         if class_locator.count() == 0:
             continue
         class_text = class_locator.first.inner_text().strip()
@@ -332,6 +331,6 @@ def select_properties(page,MAX_SELECT=20):
     selected = selected[:MAX_SELECT]
     for prop in selected:
         row = rows.nth(prop["index"])
-        checkbox = row.locator('.//*[@type="checkbox"]')
+        checkbox = row.locator('xpath=.//*[@type="checkbox"]')
         if checkbox.count() > 0:
             checkbox.first.click()

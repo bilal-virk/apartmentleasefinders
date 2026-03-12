@@ -1,10 +1,16 @@
-import re
-def extract_rating(text: str) -> float:
-    if not text:
-        return 0.0
-    match = re.search(r'(\d+(\.\d+)?)', text)
-    if match:
-        return float(match.group(1))
-    stars = text.count("★")
-    return float(stars) if stars > 0 else 0.0
-print(extract_rating("4.5 ★"))
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.connect_over_cdp("http://localhost:9222")
+    print("Connected to existing Chrome instance on port 9222")
+
+    context = browser.contexts[0]
+    page = context.pages[0]
+
+    # Access iframe
+    frame = page.frame_locator('//iframe[@frameborder="0"]')
+    element_contains_number = frame.locator('//*[contains(text(), "[number]")]').first
+    text = element_contains_number.inner_text()
+    new_text = text.replace("[number]", "20")
+    element_contains_number.evaluate("(el, value) => el.innerText = value", new_text)
+    print("Updated text:", new_text)

@@ -1,61 +1,67 @@
-# Template: Python - Browser automation with Playwright
+### Recent Updates
 
-This template leverages the new [Python framework](https://github.com/robocorp/robocorp)
+- Enhanced property selection logic to prioritize properties based on merit.  
+- Fixed email template selection to ensure correct templates are applied.  
+- Updated automation to dynamically replace `[number]` with the selected number of properties.  
+- Improved handling of background issues: skips selection if the value is `"None"`.  
+- Implemented robust crash handling to prevent unfinished threads from affecting new tasks.  
+- Ensured that any task failure closes the specific task cleanly, preparing the system for subsequent executions.
 
-The template provides you with the basic structure of a Python project: logging out of the box and controlling your tasks without fiddling with the base Python stuff. The environment contains the most used libraries, so you do not have to start thinking about those right away. 
-With `robocorp-browser`, the browser automation uses Playwright without any extra steps. 
+---
 
-👉 Other templates are available as well via our tooling and on our [Portal](https://robocorp.com/portal/tag/template)
+### Issues Identified in the Current RPA Implementation
 
-## Running
+During testing of the current RPA system, several architectural and stability issues were identified that could impact reliability, scalability, and concurrent task handling.
 
-#### VS Code
-1. Get [Robocorp Code](https://robocorp.com/docs/developer-tools/visual-studio-code/extension-features) -extension for VS Code.
-1. You'll get an easy-to-use side panel and powerful command-palette commands for running, debugging, code completion, docs, etc.
+#### 1. Shared `client.json` File for Data Storage
 
-#### Command line
+The automation currently relies on a shared `client.json` file to store client-specific data, which each RPA execution reads instead of receiving parameters directly.  
 
-1. [Get RCC](https://github.com/robocorp/rcc?tab=readme-ov-file#getting-started)
-1. Use the command: `rcc run`
+**Issues:**
 
-## Results
+- When a new RPA task starts, it overwrites the data in `client.json`.  
+- If another RPA task is already running, its required data may be replaced by the new request.  
+- Concurrent executions can therefore corrupt each other’s data, leading to incorrect results.
 
-🚀 After running the bot, check out the `log.html` under the `output` -folder.
+**Recommended Improvement:**
 
-## Dependencies
+- Pass client-specific data directly to the RPA process (e.g., via API parameters, task queues, or isolated execution contexts) instead of using a shared file.  
 
-We strongly recommend getting familiar with adding your dependencies in [conda.yaml](conda.yaml) to control your Python dependencies and the whole Python environment for your automation.
+---
 
-<details>
-  <summary>🙋‍♂️ "Why not just pip install...?"</summary>
+#### 2. Lack of Proper Session Cleanup After Failures
 
-Think of [conda.yaml](conda.yaml) as an equivalent of the requirements.txt, but much better. 👩‍💻 With `conda.yaml`, you are not just controlling your PyPI dependencies; you control the complete Python environment, which makes things repeatable and easy.
+Testing revealed that when an RPA execution crashes, the session is not properly terminated.  
 
-👉 You will probably need to run your code on another machine quite soon, so by using `conda.yaml`:
-- You can avoid `Works on my machine` -cases
-- You do not need to manage Python installations on all the machines
-- You can control exactly which version of Python your automation will run on 
-  - You'll also control the pip version to avoid dep. resolution changes
-- No need for venv, pyenv, ... tooling and knowledge sharing inside your team.
-- Define dependencies in conda.yaml, let our tooling do the heavy lifting.
-- You get all the content of [conda-forge](https://prefix.dev/channels/conda-forge) without any extra tooling
+**Issues:**
 
-> Dive deeper with [these](https://github.com/robocorp/rcc/blob/master/docs/recipes.md#what-is-in-condayaml) resources.
+- Previous incomplete sessions remain active.  
+- New RPA requests attempt to run while the prior session still occupies resources.  
+- This can cause freezes or repeated crashes.
 
-</details>
-<br/>
+**Recommended Improvement:**
 
-> The full power of [rpaframework](https://robocorp.com/docs/python/rpa-framework) -libraries is also available on Python as a backup while we implement the new Python libraries.
+- Implement proper session management to include:  
+  - Guaranteed cleanup of resources after crashes  
+  - Timeout handling for stuck sessions  
+  - Isolation of tasks in separate execution environments  
 
-## What now?
+---
 
-🚀 Now, go get'em
+#### 3. Blocking Execution Due to `time.sleep()`
 
-Start writing Python and remember that the AI/LLM's out there are getting really good and creating Python code specifically.
+The current implementation relies heavily on `time.sleep()` for waiting.  
 
-👉 Try out [Robocorp ReMark 💬](https://chat.robocorp.com)
+**Issues:**
 
-For more information, do not forget to check out the following:
-- [Robocorp Documentation -site](https://robocorp.com/docs)
-- [Portal for more examples](https://robocorp.com/portal)
-- Follow our main [robocorp -repository](https://github.com/robocorp/robocorp) as it is the main location where we developed the libraries and the framework.
+- Blocking waits cause the entire process to pause, leaving server resources idle but locked.  
+- Multiple concurrent RPA tasks cannot proceed efficiently.  
+- This approach reduces scalability and performance in multi-task environments.
+
+**Recommended Improvement:**
+
+- Replace blocking waits with more efficient methods, such as:  
+  - Event-driven waiting  
+  - Asynchronous task handling  
+  - Non-blocking wait mechanisms  
+  - Framework-native waiting methods (e.g., Playwright or Selenium wait conditions)  

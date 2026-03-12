@@ -17,169 +17,197 @@ from utils import *
 
 @task
 def smartapartment_insert_data():
+    try:
+        # Open and read JSON file
+        with open("client.json", "r") as file:
+            data = json.load(file)
+        # if not data['first_name'] in ['Koushik', 'Arathy', "Pradeep", "Sarah", "Darwin"]:
+        #     sys.exit(0)
+        #     return 
+        if data['Preferred Location'][0] == "I don't know. Help!" :
+            print("Preferred Location is I don't know help")
+            sys.exit(0)
+            return 
+        tags = data.get('Tags', [])
+        playwright = browser.playwright()
+        chromium = playwright.chromium
+        browser_app = chromium.connect_over_cdp("http://localhost:9222")
 
-    # Open and read JSON file
-    with open("client.json", "r") as file:
-        data = json.load(file)
-    # if not data['first_name'] in ['Koushik', 'Arathy', "Pradeep", "Sarah", "Darwin"]:
-    #     sys.exit(0)
-    #     return 
-    if data['Preferred Location'][0] == "I don't know. Help!" :
-        print("Preferred Location is I don't know help")
-        sys.exit(0)
-        return 
+        # Pick the first available context/page, or create a new one
+        context = browser_app.contexts[0] if browser_app.contexts else browser_app.new_context()
+        page = context.new_page()
+
+        # Navigate to SmartApartmentData with logged-in profile
+        page.goto("https://app.smartapartmentdata.com/Restricted/Account/MyDashboard.aspx")
+
+        #click on create new client
+        page.click("#ctl00_ContentPlaceHolder_newClientLink")
+
+        # fill details
+        # data.get('first_name') and page.fill("input[name='ctl00$ContentPlaceHolder$firstnameInput']", data['first_name'])
+        # data.get('last_name') and page.fill("input[name='ctl00$ContentPlaceHolder$lastnameInput']", data['last_name'])
+        safe_fill(page, "input[name='ctl00$ContentPlaceHolder$firstnameInput']", data.get('first_name'))
+        safe_fill(page, "input[name='ctl00$ContentPlaceHolder$lastnameInput']", data.get('last_name'))
+
+        data.get('email') and page.fill("input[name='ctl00$ContentPlaceHolder$emailInput']", data['email'])
+        data.get('phone') and page.fill("input[name='ctl00$ContentPlaceHolder$primaryPhone']", format_phone_number_without_code(data['phone']))
+        page.fill("input[name='ctl00$ContentPlaceHolder$status']", "Active - Looking")
+        page.fill("input[name='ctl00$ContentPlaceHolder$source']", "Internet")
+        page.fill("input[name='ctl00$ContentPlaceHolder$moveInDate$dateInput']", data["Ideal Move In Date"])
+        time.sleep(3)
+        #save
+        page.click("#ctl00_NavigationPlaceHolder_saveBtn")
+        time.sleep(3)
+        #build search
+        page.click("#ctl00_NavigationPlaceHolder_buildSearch")
+
+        # fill max monthly budget
+        page.fill("input[name='ctl00$ContentPlaceHolder$priceMax']", str(data["Ideal Monthly Budget Value"]))
+
+        # find min bedrooms using regex
+        min_bed = re.findall(r"\d",data['Apartment Size'])[0]
+        if min_bed == '0':
+            max_bed = '1'
+        else:
+            max_bed = min_bed
+
+        # fill min and max bedroom
+        page.fill("input[name='ctl00$ContentPlaceHolder$bedMin']", min_bed)
+        page.fill("input[name='ctl00$ContentPlaceHolder$bedMax']", max_bed)
+
+        # find and fill min and max bathroom
+        baths = re.findall(r"\d",data['Number of Bathrooms'])[0]
+        page.fill("input[name='ctl00$ContentPlaceHolder$bathMin']", baths)
+        page.fill("input[name='ctl00$ContentPlaceHolder$bathMax']",baths)
+
+        # compulsary checkboxes that need to be ticked
+        page.click("#ctl00_ContentPlaceHolder_fullsizeConnection")
+        page.click("#ctl00_ContentPlaceHolder_fullsizeFurnished")
+        page.click("#ctl00_ContentPlaceHolder_stackableConnection")
+        page.click("#ctl00_ContentPlaceHolder_stackableFurnished")
+
+        # Click the "Policies" tab first
+        page.click("span.rtsTxt:text('Policies')")
+
+        # Wait for the tab content to load (adjust selector to something unique in Policies tab)
+        page.wait_for_selector("#ctl00_ContentPlaceHolder_seniorCitizenHousingNOT")
+
+        # Then click the desired element
+        page.click("#ctl00_ContentPlaceHolder_seniorCitizenHousingNOT")
+
+
+        # select background issue if any
+        background_issues = data.get('Background Issues', "None")
+        if background_issues!="None":
+            select_background_issues(page, background_issues)
+
+        
+
+        # click on narrow by area
+        page.click("#ctl00_ContentPlaceHolder_editAreaLink")
+
+        # Wait until the RadWindow iframe is attached and available
+        frame = page.frame_locator("iframe[name='RadWindow']")
+        frame.locator("input[type='checkbox']").first.wait_for()
+
+
+        
+        # # Get all checkbox inputs
+        # checkboxes = frame.locator("input[type='checkbox']")
+        # count = checkboxes.count()
+        # values = []
+        # for i in range(count):
+        #     val = checkboxes.nth(i).get_attribute("value")
+        #     if val:
+        #         values.append(val)
+        # print(values)
+        # for loc in data['Preferred Location']:
+        #     click_checkbox_by_value(frame, loc, values)
+        
+        click_checkbox_by_mapping(data['Preferred Location'], frame)
+
+        # close rad window
+        frame.locator("#ctl00_ContentPlaceHolder_saveBtn_input").click()
+
+        # search 
+        page.click("#ctl00_NavigationPlaceHolder_searchBtn")
+
+        # Wait for the property grid table rows to appear
+        page.locator("#ctl00_ContentPlaceHolder_PropertiesGrid_ctl00 tr").first.wait_for()
+        budget = data["Ideal Monthly Budget Value"]
+        props = get_checkboxes(page, budget, min_bed)
+        # properties = "" #//tr[@propertyid]
+        # for prop in props:
+        #     print(f"Clicking: {prop['name']}")
+        #     prop['checkbox'].click()
+        select_properties(page,MAX_SELECT=20)
+        page.wait_for_timeout(2000)
+
+        page.click("#ctl00_NavigationPlaceHolder_emailBtn")
+        
+
     
-    playwright = browser.playwright()
-    chromium = playwright.chromium
-    browser_app = chromium.connect_over_cdp("http://localhost:9222")
+        # select email template
+        template_to_select = "(Track A 90+) Sending the List"
 
-    # Pick the first available context/page, or create a new one
-    context = browser_app.contexts[0] if browser_app.contexts else browser_app.new_context()
-    page = context.new_page()
+        if 'track a' in tags and '90' in tags:
+            template_to_select = "(Track A 90+) Sending the List"
 
-    # Navigate to SmartApartmentData with logged-in profile
-    page.goto("https://app.smartapartmentdata.com/Restricted/Account/MyDashboard.aspx")
+        elif 'track a' in tags:
+            template_to_select = "(Track A) Sending the List"
 
-    #click on create new client
-    page.click("#ctl00_ContentPlaceHolder_newClientLink")
+        elif 'track b' in tags and '90' in tags:
+            template_to_select = "(Track B 90+) Sending the List"
 
-    # fill details
-    # data.get('first_name') and page.fill("input[name='ctl00$ContentPlaceHolder$firstnameInput']", data['first_name'])
-    # data.get('last_name') and page.fill("input[name='ctl00$ContentPlaceHolder$lastnameInput']", data['last_name'])
-    safe_fill(page, "input[name='ctl00$ContentPlaceHolder$firstnameInput']", data.get('first_name'))
-    safe_fill(page, "input[name='ctl00$ContentPlaceHolder$lastnameInput']", data.get('last_name'))
+        elif 'track b' in tags:
+            template_to_select = "(Track B) Sending the List"
 
-    data.get('email') and page.fill("input[name='ctl00$ContentPlaceHolder$emailInput']", data['email'])
-    data.get('phone') and page.fill("input[name='ctl00$ContentPlaceHolder$primaryPhone']", format_phone_number_without_code(data['phone']))
-    page.fill("input[name='ctl00$ContentPlaceHolder$status']", "Active - Looking")
-    page.fill("input[name='ctl00$ContentPlaceHolder$source']", "Internet")
-    page.fill("input[name='ctl00$ContentPlaceHolder$moveInDate$dateInput']", data["Ideal Move In Date"])
-    time.sleep(3)
-    #save
-    page.click("#ctl00_NavigationPlaceHolder_saveBtn")
-    time.sleep(3)
-    #build search
-    page.click("#ctl00_NavigationPlaceHolder_buildSearch")
-
-    # fill max monthly budget
-    page.fill("input[name='ctl00$ContentPlaceHolder$priceMax']", str(data["Ideal Monthly Budget Value"]))
-
-    # find min bedrooms using regex
-    min_bed = re.findall(r"\d",data['Apartment Size'])[0]
-    if min_bed == '0':
-        max_bed = '1'
-    else:
-        max_bed = min_bed
-
-    # fill min and max bedroom
-    page.fill("input[name='ctl00$ContentPlaceHolder$bedMin']", min_bed)
-    page.fill("input[name='ctl00$ContentPlaceHolder$bedMax']", max_bed)
-
-    # find and fill min and max bathroom
-    baths = re.findall(r"\d",data['Number of Bathrooms'])[0]
-    page.fill("input[name='ctl00$ContentPlaceHolder$bathMin']", baths)
-    page.fill("input[name='ctl00$ContentPlaceHolder$bathMax']",baths)
-
-    # compulsary checkboxes that need to be ticked
-    page.click("#ctl00_ContentPlaceHolder_fullsizeConnection")
-    page.click("#ctl00_ContentPlaceHolder_fullsizeFurnished")
-    page.click("#ctl00_ContentPlaceHolder_stackableConnection")
-    page.click("#ctl00_ContentPlaceHolder_stackableFurnished")
-
-    # Click the "Policies" tab first
-    page.click("span.rtsTxt:text('Policies')")
-
-    # Wait for the tab content to load (adjust selector to something unique in Policies tab)
-    page.wait_for_selector("#ctl00_ContentPlaceHolder_seniorCitizenHousingNOT")
-
-    # Then click the desired element
-    page.click("#ctl00_ContentPlaceHolder_seniorCitizenHousingNOT")
+        else:
+            template_to_select = "(Track A 90+) Sending the List"
+        select_form_letter(page, template_to_select)
 
 
-    # select background issue if any
-    background_issues = data.get('Background Issues', "None")
-    if background_issues!="None":
-        select_background_issues(page, background_issues)
-
-    
-
-    # click on narrow by area
-    page.click("#ctl00_ContentPlaceHolder_editAreaLink")
-
-    # Wait until the RadWindow iframe is attached and available
-    frame = page.frame_locator("iframe[name='RadWindow']")
-    frame.locator("input[type='checkbox']").first.wait_for()
-
-
-    
-    # # Get all checkbox inputs
-    # checkboxes = frame.locator("input[type='checkbox']")
-    # count = checkboxes.count()
-    # values = []
-    # for i in range(count):
-    #     val = checkboxes.nth(i).get_attribute("value")
-    #     if val:
-    #         values.append(val)
-    # print(values)
-    # for loc in data['Preferred Location']:
-    #     click_checkbox_by_value(frame, loc, values)
-    
-    click_checkbox_by_mapping(data['Preferred Location'], frame)
-
-    # close rad window
-    frame.locator("#ctl00_ContentPlaceHolder_saveBtn_input").click()
-
-    # search 
-    page.click("#ctl00_NavigationPlaceHolder_searchBtn")
-
-    # Wait for the property grid table rows to appear
-    page.locator("#ctl00_ContentPlaceHolder_PropertiesGrid_ctl00 tr").first.wait_for()
-    budget = data["Ideal Monthly Budget Value"]
-    props = get_checkboxes(page, budget, min_bed)
-    # properties = "" #//tr[@propertyid]
-    # for prop in props:
-    #     print(f"Clicking: {prop['name']}")
-    #     prop['checkbox'].click()
-    select_properties(page,MAX_SELECT=20)
-    page.wait_for_timeout(2000)
-
-    page.click("#ctl00_NavigationPlaceHolder_emailBtn")
-    
-
-   
-    # select email template
-    select_form_letter(page, "Here is the list of apartments you requested")
+        # dynamically fill subject line
+        # if budget<=1200 and (min_bed==0 or min_bed==1):
+        #     subject = f"{data['first_name']}, Here's the apartment info you requested ({min_bed}-{baths} options under {budget} in the {', '.join(data['Preferred Location'])}... let me know your top 3-6 options and we'll call to get the best deal)"
+        # else:
+        #     subject = f"{data['first_name']}, Here's the apartment info you requested ({min_bed}-{baths} options under {budget} in your areas... I can narrow down to top 5-10 with more info on whats most important to you)"
+        
+        subject = f"{data['first_name']}, here's the apartment info you requested ({min_bed}-{baths} under ${budget} in {', '.join(data['Preferred Location'])}). Let me know your top 3-6 options, and we'll call the properties to get the best deal."
+        time.sleep(2)
+        page.fill("input[name='ctl00$ContentPlaceHolder$subject']", subject)
+        '''
+        {{Client's Name}}, here's the apartment info you requested (1-1 under $____ in these areas). Let me know your top 3-6 options, and we'll call the properties to get the best deal.
+        '''
+        try:
+            frame = page.frame_locator('//iframe[@frameborder="0"]')
+            element_contains_number = frame.locator('//*[contains(text(), "[number]")]').first
+            text = element_contains_number.inner_text()
+            new_text = text.replace("[number]", "20")
+            element_contains_number.evaluate("(el, value) => el.innerText = value", new_text)
+        except:
+            pass
 
 
-    # dynamically fill subject line
-    # if budget<=1200 and (min_bed==0 or min_bed==1):
-    #     subject = f"{data['first_name']}, Here's the apartment info you requested ({min_bed}-{baths} options under {budget} in the {', '.join(data['Preferred Location'])}... let me know your top 3-6 options and we'll call to get the best deal)"
-    # else:
-    #     subject = f"{data['first_name']}, Here's the apartment info you requested ({min_bed}-{baths} options under {budget} in your areas... I can narrow down to top 5-10 with more info on whats most important to you)"
-    
-    subject = f"{data['first_name']}, here's the apartment info you requested ({min_bed}-{baths} under ${budget} in {', '.join(data['Preferred Location'])}). Let me know your top 3-6 options, and we'll call the properties to get the best deal."
-    time.sleep(2)
-    page.fill("input[name='ctl00$ContentPlaceHolder$subject']", subject)
-    '''
-    {{Client's Name}}, here's the apartment info you requested (1-1 under $____ in these areas). Let me know your top 3-6 options, and we'll call the properties to get the best deal.
-    '''
+        time.sleep(3)
 
+        # click on cc me
+        page.click("#ctl00_ContentPlaceHolder_registrationCardCC")
 
-    time.sleep(3)
+        # click on send email
+        page.click("#ctl00_NavigationPlaceHolder_sendBtn")
 
-    # click on cc me
-    page.click("#ctl00_ContentPlaceHolder_registrationCardCC")
+        time.sleep(5)
+        page.close()
 
-    # click on send email
-    page.click("#ctl00_NavigationPlaceHolder_sendBtn")
-
-    time.sleep(5)
-    page.close()
-
-    requests.post(url="https://services.leadconnectorhq.com/hooks/QRof2UTEmQswZAiO7A6Q/webhook-trigger/87009a7f-269f-4c86-94b8-98904a296332",json=data) # Webhook to trigger automation on GoHighLevel "Update Stage to List Sent"
-    
+        requests.post(url="https://services.leadconnectorhq.com/hooks/QRof2UTEmQswZAiO7A6Q/webhook-trigger/87009a7f-269f-4c86-94b8-98904a296332",json=data) # Webhook to trigger automation on GoHighLevel "Update Stage to List Sent"
+    except:        
+        print(f"[ERROR] Something went wrong: {traceback.format_exc()}")
     # add functionality to close tab after sending email
-    
+    try:
+        page.close()    
+    except:
+        pass
     
     # Screenshot for proof
     # page.screenshot(path="output/smartapartment.png")
