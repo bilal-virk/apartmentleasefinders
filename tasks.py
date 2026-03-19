@@ -23,12 +23,32 @@ def smartapartment_insert_data():
             data = json.load(file)
         # if not data['first_name'] in ['Koushik', 'Arathy', "Pradeep", "Sarah", "Darwin"]:
         #     sys.exit(0)
-        #     return 
-        if data['Preferred Location'][0] == "I don't know. Help!" :
+        #     return
+        locations = [
+            data.get("Preferred Location DTX"),
+            data.get("Preferred Location HTX"),
+            data.get("Preferred Location ATX"),
+            (data.get("Preferred Location") or [None])[0]
+        ]
+
+        def is_empty(value):
+            return value in [None, "", "None"]
+
+        def is_help(value):
+            return value == "I don't know. Help!"
+
+        def is_real(value):
+            return not is_empty(value) and not is_help(value)
+
+        has_help = any(is_help(v) for v in locations)
+        has_real = any(is_real(v) for v in locations)
+
+        if has_help and not has_real:
             print("Preferred Location is I don't know help")
             sys.exit(0)
             return 
         tags = data.get('Tags', [])
+        tags_str = " ".join(tags).lower()
         playwright = browser.playwright()
         chromium = playwright.chromium
         browser_app = chromium.connect_over_cdp("http://localhost:9222")
@@ -140,7 +160,7 @@ def smartapartment_insert_data():
         # for prop in props:
         #     print(f"Clicking: {prop['name']}")
         #     prop['checkbox'].click()
-        select_properties(page,MAX_SELECT=20)
+        pr_selected = select_properties(page,MAX_SELECT=20)
         page.wait_for_timeout(2000)
 
         page.click("#ctl00_NavigationPlaceHolder_emailBtn")
@@ -150,16 +170,16 @@ def smartapartment_insert_data():
         # select email template
         template_to_select = "(Track A 90+) Sending the List"
 
-        if 'track a' in tags and '90' in tags:
+        if 'track a' in tags_str and '90' in tags_str:
             template_to_select = "(Track A 90+) Sending the List"
 
-        elif 'track a' in tags:
+        elif 'track a' in tags_str:
             template_to_select = "(Track A) Sending the List"
 
-        elif 'track b' in tags and '90' in tags:
+        elif 'track b' in tags_str and '90' in tags_str:
             template_to_select = "(Track B 90+) Sending the List"
 
-        elif 'track b' in tags:
+        elif 'track b' in tags_str:
             template_to_select = "(Track B) Sending the List"
 
         else:
@@ -183,7 +203,7 @@ def smartapartment_insert_data():
             frame = page.frame_locator('//iframe[@frameborder="0"]')
             element_contains_number = frame.locator('//*[contains(text(), "[number]")]').first
             text = element_contains_number.inner_text()
-            new_text = text.replace("[number]", "20")
+            new_text = text.replace("[number]", str(pr_selected))
             element_contains_number.evaluate("(el, value) => el.innerText = value", new_text)
         except:
             pass
@@ -323,6 +343,6 @@ def favorited_properties():
         prop_list.append(f" {prop['Property']} ")
 
     page.close()
-    requests.post(url="https://services.leadconnectorhq.com/hooks/QRof2UTEmQswZAiO7A6Q/webhook-trigger/b335e765-c182-431b-a24a-a6047730074a",json={"name":name,"properties":prop_list})
+    requests.post(url="https://services.leadconnectorhq.com/hooks/QRof2UTEmQswZAiO7A6Q/webhook-trigger/b335e765-c182-431b-a24a-a6047730074a",json={"name":name,"properties":prop_list}) # Webhook to trigger automation on GoHighLevel "Send SMS and Email after Client sent Fav and change stage to Client sent Favs"
 
     print("[OK] Favorites data saved to Airtable")

@@ -296,7 +296,7 @@ def select_properties(page,MAX_SELECT=20):
             rating_text = rating_locator.first.inner_text().strip()
             rating = extract_rating(rating_text)
         else:
-            rating = 0.0 
+            rating = 4.5
         class_locator = row.locator('xpath=.//*[contains(text(), "Class")]')
         if class_locator.count() == 0:
             continue
@@ -334,3 +334,4 @@ def select_properties(page,MAX_SELECT=20):
         checkbox = row.locator('xpath=.//*[@type="checkbox"]')
         if checkbox.count() > 0:
             checkbox.first.click()
+    return len(selected)
