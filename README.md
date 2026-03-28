@@ -8,6 +8,10 @@
 - Ensured that any task failure closes the specific task cleanly, preparing the system for subsequent executions.
 - Made RPA to enter minimum budget by minusing 500 and add maximum budget by adding extra 100 to actual budget
 - Now it will pick only select properties with ratings 3.5 - 5
+- Added "Must Have" Property Amenities
+- Added "Must Have" Unit Amenities
+- Fix for selecting background issues
+- Improved logging system
 ---
 
 ### Issues Identified in the Current RPA Implementation
