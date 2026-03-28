@@ -21,6 +21,8 @@ def smartapartment_insert_data():
         # Open and read JSON file
         with open("client.json", "r") as file:
             data = json.load(file)
+        must_have_property_amenities = data.get('"Must Have" Property Amenities', [])
+        must_have_unit_amenities = data.get('"Must Have" Unit Amenities', [])
         # if not data['first_name'] in ['Koushik', 'Arathy', "Pradeep", "Sarah", "Darwin"]:
         #     sys.exit(0)
         #     return
@@ -39,12 +41,23 @@ def smartapartment_insert_data():
 
         def is_real(value):
             return not is_empty(value) and not is_help(value)
+        def has_data(value):
+            if value is None:
+                return None
+            if isinstance(value, str) and value.strip() == "":
+                return None
+            if isinstance(value, (list, dict)) and len(value) == 0:
+                return None
+            return True
+
+        has_eviction = has_data(data.get("Eviction and History", None))
+        has_background_issues = has_data(data.get("Background Issues", None))
 
         has_help = any(is_help(v) for v in locations)
         has_real = any(is_real(v) for v in locations)
 
         if has_help and not has_real:
-            print("Preferred Location is I don't know help")
+            pwrite("Preferred Location is I don't know help")
             sys.exit(0)
             return 
         tags = data.get('Tags', [])
@@ -82,7 +95,10 @@ def smartapartment_insert_data():
         page.click("#ctl00_NavigationPlaceHolder_buildSearch")
 
         # fill max monthly budget
-        page.fill("input[name='ctl00$ContentPlaceHolder$priceMax']", str(data["Ideal Monthly Budget Value"]))
+        min_budget = int(data.get("Ideal Monthly Budget Value", 0)) - 500
+        max_budget = int(data.get("Ideal Monthly Budget Value", 0)) + 100
+        page.fill("input[name='ctl00$ContentPlaceHolder$priceMin']", str(min_budget))
+        page.fill("input[name='ctl00$ContentPlaceHolder$priceMax']", str(max_budget))
 
         # find min bedrooms using regex
         min_bed = re.findall(r"\d",data['Apartment Size'])[0]
@@ -101,11 +117,13 @@ def smartapartment_insert_data():
         page.fill("input[name='ctl00$ContentPlaceHolder$bathMax']",baths)
 
         # compulsary checkboxes that need to be ticked
-        page.click("#ctl00_ContentPlaceHolder_fullsizeConnection")
-        page.click("#ctl00_ContentPlaceHolder_fullsizeFurnished")
-        page.click("#ctl00_ContentPlaceHolder_stackableConnection")
-        page.click("#ctl00_ContentPlaceHolder_stackableFurnished")
-
+        # page.click("#ctl00_ContentPlaceHolder_fullsizeConnection")
+        # page.click("#ctl00_ContentPlaceHolder_fullsizeFurnished")
+        # page.click("#ctl00_ContentPlaceHolder_stackableConnection")
+        # page.click("#ctl00_ContentPlaceHolder_stackableFurnished")
+        click_amenities(page, must_have_property_amenities, PROPERTY_AMENITIES_MAP)
+        time.sleep(1)
+        click_amenities(page, must_have_unit_amenities, UNIT_AMENITIES_MAP)
         # Click the "Policies" tab first
         page.click("span.rtsTxt:text('Policies')")
 
@@ -140,11 +158,11 @@ def smartapartment_insert_data():
         #     val = checkboxes.nth(i).get_attribute("value")
         #     if val:
         #         values.append(val)
-        # print(values)
-        # for loc in data['Preferred Location']:
+        # pwrite(values)
+        # for loc in data['Preferred Location HTX']:
         #     click_checkbox_by_value(frame, loc, values)
         
-        click_checkbox_by_mapping(data['Preferred Location'], frame)
+        click_checkbox_by_mapping(data.get('Preferred Location', data.get('Preferred Location HTX', '')), frame)
 
         # close rad window
         frame.locator("#ctl00_ContentPlaceHolder_saveBtn_input").click()
@@ -155,12 +173,12 @@ def smartapartment_insert_data():
         # Wait for the property grid table rows to appear
         page.locator("#ctl00_ContentPlaceHolder_PropertiesGrid_ctl00 tr").first.wait_for()
         budget = data["Ideal Monthly Budget Value"]
-        props = get_checkboxes(page, budget, min_bed)
+        #props = get_checkboxes(page, budget, min_bed)
         # properties = "" #//tr[@propertyid]
         # for prop in props:
-        #     print(f"Clicking: {prop['name']}")
+        #     pwrite(f"Clicking: {prop['name']}")
         #     prop['checkbox'].click()
-        pr_selected = select_properties(page,MAX_SELECT=20)
+        pr_selected = select_properties(page,MAX_SELECT=20, has_eviction=has_eviction, has_background_issues=has_background_issues)
         page.wait_for_timeout(2000)
 
         page.click("#ctl00_NavigationPlaceHolder_emailBtn")
@@ -189,11 +207,11 @@ def smartapartment_insert_data():
 
         # dynamically fill subject line
         # if budget<=1200 and (min_bed==0 or min_bed==1):
-        #     subject = f"{data['first_name']}, Here's the apartment info you requested ({min_bed}-{baths} options under {budget} in the {', '.join(data['Preferred Location'])}... let me know your top 3-6 options and we'll call to get the best deal)"
+        #     subject = f"{data['first_name']}, Here's the apartment info you requested ({min_bed}-{baths} options under {budget} in the {', '.join(data['Preferred Location HTX'])}... let me know your top 3-6 options and we'll call to get the best deal)"
         # else:
         #     subject = f"{data['first_name']}, Here's the apartment info you requested ({min_bed}-{baths} options under {budget} in your areas... I can narrow down to top 5-10 with more info on whats most important to you)"
         
-        subject = f"{data['first_name']}, here's the apartment info you requested ({min_bed}-{baths} under ${budget} in {', '.join(data['Preferred Location'])}). Let me know your top 3-6 options, and we'll call the properties to get the best deal."
+        subject = f"{data['first_name']}, here's the apartment info you requested ({min_bed}-{baths} under ${budget} in {', '.join(data.get('Preferred Location', data.get('Preferred Location HTX', '')))}). Let me know your top 3-6 options, and we'll call the properties to get the best deal."
         time.sleep(2)
         page.fill("input[name='ctl00$ContentPlaceHolder$subject']", subject)
         '''
@@ -222,7 +240,7 @@ def smartapartment_insert_data():
 
         requests.post(url="https://services.leadconnectorhq.com/hooks/QRof2UTEmQswZAiO7A6Q/webhook-trigger/87009a7f-269f-4c86-94b8-98904a296332",json=data) # Webhook to trigger automation on GoHighLevel "Update Stage to List Sent"
     except:        
-        print(f"[ERROR] Something went wrong: {traceback.format_exc()}")
+        pwrite(f"[ERROR] Something went wrong: {traceback.format_exc()}")
     # add functionality to close tab after sending email
     try:
         page.close()    
@@ -231,7 +249,7 @@ def smartapartment_insert_data():
     
     # Screenshot for proof
     # page.screenshot(path="output/smartapartment.png")
-    print("[Ok] data added to SMART")
+    pwrite("[Ok] data added to SMART")
 
 
 
@@ -257,7 +275,7 @@ def favorited_properties():
     page = context.new_page()
     page.goto(link)
 
-    print(f"[OK] Navigated to {link}")
+    pwrite(f"[OK] Navigated to {link}")
 
     # ---- Extract table data ----
     rows = page.query_selector_all("#FavoritesGrid_ctl00 tbody tr")
@@ -288,7 +306,7 @@ def favorited_properties():
                 manager = new_page.locator("#ctl00_ContentPlaceHolder_OfficeMgr").inner_text(timeout=5000)       # replace selector
                 manager = regex_for_manager_name(manager)
             except Exception as e:
-                print(f"[WARN] Could not fetch details for {property_name}: {e}")
+                pwrite(f"[WARN] Could not fetch details for {property_name}: {e}")
 
             new_page.close()
         if address:
@@ -345,4 +363,4 @@ def favorited_properties():
     page.close()
     requests.post(url="https://services.leadconnectorhq.com/hooks/QRof2UTEmQswZAiO7A6Q/webhook-trigger/b335e765-c182-431b-a24a-a6047730074a",json={"name":name,"properties":prop_list}) # Webhook to trigger automation on GoHighLevel "Send SMS and Email after Client sent Fav and change stage to Client sent Favs"
 
-    print("[OK] Favorites data saved to Airtable")
+    pwrite("[OK] Favorites data saved to Airtable")

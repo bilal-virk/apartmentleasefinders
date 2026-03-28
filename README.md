@@ -6,7 +6,8 @@
 - Improved handling of background issues: skips selection if the value is `"None"`.  
 - Implemented robust crash handling to prevent unfinished threads from affecting new tasks.  
 - Ensured that any task failure closes the specific task cleanly, preparing the system for subsequent executions.
-
+- Made RPA to enter minimum budget by minusing 500 and add maximum budget by adding extra 100 to actual budget
+- Now it will pick only select properties with ratings 3.5 - 5
 ---
 
 ### Issues Identified in the Current RPA Implementation

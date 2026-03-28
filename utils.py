@@ -1,10 +1,25 @@
 import requests 
+import logging
 import os 
 from dotenv import load_dotenv
 load_dotenv()
 from rapidfuzz import process, fuzz
 import re
 import traceback
+logger = logging.getLogger("customLogger")
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler(os.path.join(os.getcwd(), 'App.log'), encoding="utf-8")
+file_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+def pwrite(*args, p=True):
+    message = " ".join(str(arg) for arg in args)
+    message = f'{message}'
+    logger.info(message)
+    if p:
+        print(message)
 def normalize_location(text):
     """Normalize location strings for better fuzzy matching."""
     text = text.lower()                  # lowercase
@@ -34,14 +49,14 @@ def click_checkbox_by_value(page, preferred_location: str, values, min_score=40)
     )
     best_match = normalized_values_map[best_normalized_match]
 
-    print(f"[INFO] Looking for '{preferred_location}', best match = '{best_match}' (score={score})")
+    pwrite(f"[INFO] Looking for '{preferred_location}', best match = '{best_match}' (score={score})")
 
     if score < min_score:
         raise ValueError(f"No good match found for '{preferred_location}' (score={score})")
 
     # Click the matching checkbox input directly
     page.locator(f"input[value='{best_match}']").click()
-    print(f"[OK] Clicked checkbox for: {best_match}")
+    pwrite(f"[OK] Clicked checkbox for: {best_match}")
 
 def click_checkbox_by_mapping(preferred_locations, page):
     import json
@@ -53,7 +68,7 @@ def click_checkbox_by_mapping(preferred_locations, page):
                 actual_locations.add(j)
         for i in actual_locations:
             page.locator(f"input[value='{i}']").click()
-            print(f"[OK] Clicked checkbox for: {i}")
+            pwrite(f"[OK] Clicked checkbox for: {i}")
 
 def get_checkboxes(page, budget, br):
     rows = page.locator("#ctl00_ContentPlaceHolder_PropertiesGrid_ctl00 tr")
@@ -62,7 +77,7 @@ def get_checkboxes(page, budget, br):
     if budget<=1200:
         max_properties = 20
     else:
-        max_properties = 30
+        max_properties = 20
     counter = 0 
     lst = ["Class A", "Class B", "Class C"]
     # if budget == 1500 and (br == '2' or br == '3'):
@@ -104,20 +119,20 @@ def select_background_issues(page, issue):
     if mapped_issue is None or \
    (isinstance(mapped_issue, str) and (mapped_issue.strip() == "" or 'none' in mapped_issue.lower())) or \
    (isinstance(mapped_issue, list) and (len(mapped_issue) == 0 or any('none' in str(x).lower() for x in mapped_issue))):
-        print(f"[WARN] No mapping found for issue: {issue}")
+        pwrite(f"[WARN] No mapping found for issue: {issue}")
         return
 
     locator = page.locator(f"input[type='checkbox'][value='{mapped_issue}']")
     if locator.count() > 0:
         locator.first.click()
-        print(f"[OK] Selected background issue: {mapped_issue}")
+        pwrite(f"[OK] Selected background issue: {mapped_issue}")
 
         # Click additional element if defined
         if id_selector:
             page.locator(id_selector).click()
-            print(f"[OK] Selected related checkbox: {id_selector}")
+            pwrite(f"[OK] Selected related checkbox: {id_selector}")
     else:
-        print(f"[WARN] No checkbox found for: {mapped_issue}")
+        pwrite(f"[WARN] No checkbox found for: {mapped_issue}")
 
 
 
@@ -138,7 +153,7 @@ def select_form_letter(page, letter_name: str):
     option.wait_for(state="visible", timeout=10000)
     page.wait_for_timeout(500)
     option.click()
-    print(f"[OK] Selected form letter: {letter_name}")
+    pwrite(f"[OK] Selected form letter: {letter_name}")
 
 
 
@@ -160,7 +175,7 @@ def process_property_rows(page, row_selector: str, link_selector: str, data_sele
     """
     rows = page.locator(row_selector)
     row_count = rows.count()
-    print(f"[INFO] Found {row_count} property rows.")
+    pwrite(f"[INFO] Found {row_count} property rows.")
 
     results = []
 
@@ -183,11 +198,11 @@ def process_property_rows(page, row_selector: str, link_selector: str, data_sele
             "data1": "data1",
             "data2": "data2"
         })
-        print(f"[DATA] {results[-1]}")
+        pwrite(f"[DATA] {results[-1]}")
 
         new_page.close()
 
-    print("[DONE] Finished processing all rows.")
+    pwrite("[DONE] Finished processing all rows.")
     return results
 
 
@@ -285,18 +300,26 @@ def extract_rating(text: str) -> float:
             return float(match.group(1))
         stars = text.count("★")
         return float(stars) if stars > 0 else 0.0
-def select_properties(page,MAX_SELECT=20):
+def select_properties(page, MAX_SELECT=20, has_eviction=None, has_background_issues=None):
     rows = page.locator('//tr[@propertyid]')
     count = rows.count()
     properties = []
+    
+    has_issues = has_eviction is True or has_background_issues is True
+    # Lower the rating threshold if applicant has issues
+
     for i in range(count):
         row = rows.nth(i)
+        
+        # Get rating
         rating_locator = row.locator('xpath=.//*[@class="review-rating"]')
         if rating_locator.count() > 0:
             rating_text = rating_locator.first.inner_text().strip()
             rating = extract_rating(rating_text)
         else:
             rating = 4.5
+
+        # Get class
         class_locator = row.locator('xpath=.//*[contains(text(), "Class")]')
         if class_locator.count() == 0:
             continue
@@ -305,33 +328,132 @@ def select_properties(page,MAX_SELECT=20):
             prop_class = "A"
         elif "Class B" in class_text:
             prop_class = "B"
+        elif "Class C" in class_text:
+            prop_class = "C"
         else:
             continue
+
         properties.append({
             "index": i,
             "rating": rating,
             "class": prop_class
         })
-    class_a_rated = [p for p in properties if p["class"] == "A" and p["rating"] > 3]
-    class_b_rated = [p for p in properties if p["class"] == "B" and p["rating"] > 3]
-    class_a_low = [p for p in properties if p["class"] == "A" and p["rating"] <= 3]
-    class_b_low = [p for p in properties if p["class"] == "B" and p["rating"] <= 3]
-    class_a_rated.sort(key=lambda x: x["rating"], reverse=True)
-    class_b_rated.sort(key=lambda x: x["rating"], reverse=True)
 
+    # ── Normal applicant (no issues): A >= 4, B >= 4, A < 4, B < 4
+    # ── Applicant with issues: same groups but extended down to 2.0
+    #    + extra groups for 2.0–3.5 range + Class C
+
+    if not has_issues:
+        # Original priority order
+        class_a_high = sorted([p for p in properties if p["class"] == "A" and p["rating"] >= 4.0], key=lambda x: x["rating"], reverse=True)
+        class_b_high = sorted([p for p in properties if p["class"] == "B" and p["rating"] >= 4.0], key=lambda x: x["rating"], reverse=True)
+        class_a_low  = sorted([p for p in properties if p["class"] == "A" and p["rating"] < 4.0],  key=lambda x: x["rating"], reverse=True)
+        class_b_low  = sorted([p for p in properties if p["class"] == "B" and p["rating"] < 4.0],  key=lambda x: x["rating"], reverse=True)
+
+        groups = [class_a_high, class_b_high, class_a_low, class_b_low]
+
+    else:
+        # Priority 1: Class A >= 4.0
+        class_a_high    = sorted([p for p in properties if p["class"] == "A" and p["rating"] >= 4.0],          key=lambda x: x["rating"], reverse=True)
+        # Priority 2: Class B >= 4.0
+        class_b_high    = sorted([p for p in properties if p["class"] == "B" and p["rating"] >= 4.0],          key=lambda x: x["rating"], reverse=True)
+        # Priority 3: Class A 3.5 < rating < 4.0
+        class_a_mid     = sorted([p for p in properties if p["class"] == "A" and 3.5 < p["rating"] < 4.0],    key=lambda x: x["rating"], reverse=True)
+        # Priority 4: Class B 3.5 < rating < 4.0
+        class_b_mid     = sorted([p for p in properties if p["class"] == "B" and 3.5 < p["rating"] < 4.0],    key=lambda x: x["rating"], reverse=True)
+        # Priority 5: Class A 2.0 <= rating <= 3.5 (compromise zone)
+        class_a_low     = sorted([p for p in properties if p["class"] == "A" and p["rating"] <= 3.5],          key=lambda x: x["rating"], reverse=True)
+        # Priority 6: Class B 2.0 <= rating <= 3.5 (compromise zone)
+        class_b_low     = sorted([p for p in properties if p["class"] == "B" and p["rating"] <= 3.5],          key=lambda x: x["rating"], reverse=True)
+        # Priority 7: Class C (all ratings, sorted by rating desc)
+        class_c_all     = sorted([p for p in properties if p["class"] == "C"],                                  key=lambda x: x["rating"], reverse=True)
+
+        # Priority 8: Class A & B rating < 2.0
+        class_a_vlow = sorted([p for p in properties if p["class"] == "A" and p["rating"] < 2.0], key=lambda x: x["rating"], reverse=True)
+        class_b_vlow = sorted([p for p in properties if p["class"] == "B" and p["rating"] < 2.0], key=lambda x: x["rating"], reverse=True)
+        class_c_vlow = sorted([p for p in properties if p["class"] == "C" and p["rating"] < 2.0], key=lambda x: x["rating"], reverse=True)
+
+        groups = [class_a_high, class_b_high, class_a_mid, class_b_mid, class_a_low, class_b_low, class_c_all, class_a_vlow, class_b_vlow, class_c_vlow]
+
+    # Merge in priority order
     selected = []
-    selected.extend(class_a_rated)
-    selected.extend(class_b_rated)
-    selected.extend(class_a_low)
-    selected.extend(class_b_low)    
-    if len(selected) < MAX_SELECT:
-        remaining = [p for p in properties if p not in selected]
-        remaining.sort(key=lambda x: x["rating"], reverse=True)
-        selected.extend(remaining[:MAX_SELECT - len(selected)])
+    for group in groups:
+        selected.extend(group)
+
+    # Cap at MAX_SELECT
     selected = selected[:MAX_SELECT]
+
+    # Click checkboxes
     for prop in selected:
         row = rows.nth(prop["index"])
         checkbox = row.locator('xpath=.//*[@type="checkbox"]')
         if checkbox.count() > 0:
             checkbox.first.click()
+
     return len(selected)
+PROPERTY_AMENITIES_MAP = {
+    "Swimming Pool": ["Swimming Pool"],
+    "Gym/Fitness Center": ["Fitness Center"],
+    "Elevators": ["Elevators"],
+    "Valet Parking": ["Valet Parking"],
+    "Parking Garage Lot": ["Parking Garage Lot"],
+    "Reserved Spaces": ["Reserved Spaces"],
+    "Attached Private Garage": ["Attached Private Garage"],
+    "Electric Car Charger": ["Electric Car Charging Stations"],
+    "Pet Washing Stations": ["Pet Washing Stations"],
+    "Doorman": ["Doorman"],
+    "Golf Course": ["Golf Course", "Golf Simulator"],
+    "Smoke Free Community": ["Smoke Free Community"],
+    "Gated with access code": ["Gated with access code"],
+    "Onsite Laundry Rooms": ["Laundry Rooms"],
+    "Handicap Friendly": ["Handicap Friendly"],
+}
+
+UNIT_AMENITIES_MAP = {
+    "Washer/Dryer supplied": ["Fullsize - supplied", "Stackable - supplied"],
+    "Patio/ Balcony": ["Patio"],
+    "Wood Floors": ["Wood Floors"],
+    "Washer/Dryer connexs": ["Fullsize - connections", "Stackable - connections"],
+    "Vinyl /Laminate Floors": ["Vinyl Flooring", "Laminate Floors"],
+    "Stained Concrete Floors": ["Stained Concrete Floors"],
+    "Dishwasher": ["Dishwasher"],
+    "Gas Appliances": ["Gas Appliances"],
+    "Granite Counters": ["Granite Counters"],
+    "Marble Countertops": ["Marble Countertops"],
+    "Quartz Countertops": ["Quartz Countertops"],
+    "Kitchen Islands": ["Kitchen Islands"],
+    "Garden Tubs": ["Garden Tubs"],
+    "Walk-in Shower": ["Walk-in Shower"],
+    "Fireplace": ["Fireplace"],
+}
+
+
+def smart_data_to_website_label(smart_value, amenity_map):
+    smart_value_lower = smart_value.lower().strip()
+    for website_label, smart_values in amenity_map.items():
+        for sv in smart_values:
+            if sv.lower().strip() == smart_value_lower:
+                return website_label
+    return None
+
+
+def click_amenities(page, amenities_list, amenity_map):
+    for smart_value in amenities_list:
+        website_label = smart_data_to_website_label(smart_value, amenity_map)
+
+        if website_label is None:
+            pwrite(f"No mapping found for: {smart_value}, trying direct match")
+            website_label = smart_value  # fallback to direct match
+
+        # Build XPath and click
+        xpath = f'//label[normalize-space()="{website_label}"]'
+        try:
+            locator = page.locator(f'xpath={xpath}')
+            if locator.count() > 0:
+                locator.first.click()
+                pwrite(f"✅ Clicked: {website_label} (from: {smart_value})")
+            else:
+                pwrite(f"❌ Not found on page: {website_label} (from: {smart_value})")
+        except Exception as e:
+            pwrite(f"❌ Error clicking {website_label}: {e}")
+        time.sleep(0.3)
