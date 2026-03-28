@@ -122,7 +122,7 @@ def select_background_issues(page, issue):
         pwrite(f"[WARN] No mapping found for issue: {issue}")
         return
 
-    locator = page.locator(f"input[type='checkbox'][value='{mapped_issue}']")
+    locator = page.locator(f'//input[@type="checkbox" and @value="{mapped_issue}"]')
     if locator.count() > 0:
         locator.first.click()
         pwrite(f"[OK] Selected background issue: {mapped_issue}")
