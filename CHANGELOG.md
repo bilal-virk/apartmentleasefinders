@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [auto-20260328052910] - 2026-03-28
+### :memo: Documentation Changes
+- [`aea0fcf`](https://github.com/bilal-virk/apartmentleasefinders/commit/aea0fcfd5236e5ed99aacc99f410364af8f95900) - **changelog**: auto-update [skip ci] *(commit by [@bilal-virk](https://github.com/bilal-virk))*
+
+### :flying_saucer: Other Changes
+- [`57f8935`](https://github.com/bilal-virk/apartmentleasefinders/commit/57f8935788b6f18c25fa4a2c4adaed4203fc3396) - Fix for slecting background issues *(commit by [@bilal-virk](https://github.com/bilal-virk))*
+
+
 ## [auto-20260328052726] - 2026-03-28
 ### :memo: Documentation Changes
 - [`19d8c07`](https://github.com/bilal-virk/apartmentleasefinders/commit/19d8c0795f70076b964933a4fe6f567715593af2) - **changelog**: auto-update [skip ci] *(commit by [@bilal-virk](https://github.com/bilal-virk))*
@@ -46,3 +54,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [auto-20260319203351]: https://github.com/bilal-virk/apartmentleasefinders/compare/auto-20260312203406...auto-20260319203351
 [auto-20260328050320]: https://github.com/bilal-virk/apartmentleasefinders/compare/auto-20260319203351...auto-20260328050320
 [auto-20260328052726]: https://github.com/bilal-virk/apartmentleasefinders/compare/auto-20260328050320...auto-20260328052726
+[auto-20260328052910]: https://github.com/bilal-virk/apartmentleasefinders/compare/auto-20260328052726...auto-20260328052910
