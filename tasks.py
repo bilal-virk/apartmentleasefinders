@@ -344,6 +344,11 @@ def favorited_properties():
     for record in records:
         table.delete(record['id'])
     # Insert all rows into Airtable
+    ensure_tour_confirmed_field(
+    base_id='appA6XNikBFdFgRtF',
+    table_name=name,
+    api_key=os.environ['AIRTABLE_API_KEY']
+)
     for prop in properties:
         table.create({
             'Property': prop['Property'],   # make sure these match your Airtable column names

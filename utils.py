@@ -1,4 +1,4 @@
-import requests 
+import requests
 import logging
 import os 
 from dotenv import load_dotenv
@@ -15,11 +15,20 @@ file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
 def pwrite(*args, p=True):
-    message = " ".join(str(arg) for arg in args)
-    message = f'{message}'
-    logger.info(message)
-    if p:
-        print(message)
+    try:
+        message = " ".join(str(arg) for arg in args)
+
+        logger.info(message)
+        if p:
+            
+            try:
+                print(message)
+            except UnicodeEncodeError:
+                # Strip or replace unencodable characters for Windows console
+                safe_message = message.encode('cp1252', errors='replace').decode('cp1252')
+                print(safe_message)
+    except:
+        pass
 def normalize_location(text):
     """Normalize location strings for better fuzzy matching."""
     text = text.lower()                  # lowercase
@@ -27,7 +36,35 @@ def normalize_location(text):
     text = re.sub(r"[^\w\s]", "", text) # remove punctuation
     text = re.sub(r"\s+", " ", text)    # collapse multiple spaces
     return text.strip()
-
+def ensure_property_fields(base_id, table_name, api_key):
+    meta_url = f"https://api.airtable.com/v0/meta/bases/{base_id}/tables"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    meta_resp = requests.get(meta_url, headers=headers)
+    tables = meta_resp.json().get("tables", [])
+    table_id = next((t["id"] for t in tables if t["name"] == table_name), None)
+    if not table_id:
+        print(f"Warning: could not find table ID for '{table_name}'")
+        return
+    fields_url = f"https://api.airtable.com/v0/meta/bases/{base_id}/tables/{table_id}/fields"
+    fields_to_create = [
+        {
+            "name": "Tour Confirmed",
+            "type": "checkbox",
+            "options": {"icon": "check", "color": "greenBright"}
+        },
+        {
+            "name": "Tour Email Sent",
+            "type": "checkbox",
+            "options": {"icon": "check", "color": "blueBright"}
+        }
+    ]
+    for field in fields_to_create:
+        resp = requests.post(fields_url, json=field, headers=headers)
+        if resp.status_code not in (200, 201, 422):
+            print(f"Warning: could not create '{field['name']}' field: {resp.text}")
 def click_checkbox_by_value(page, preferred_location: str, values, min_score=40):
     """
     Dynamically click a checkbox that best matches the given preferred_location.
@@ -104,35 +141,38 @@ def get_checkboxes(page, budget, br):
     return properties
 
 
-def select_background_issues(page, issue):
-    """
-    Selects background issue checkboxes based on the list of values provided.
-    Example: ["Eviction", "Felony", "Active Rental Debt"]
-    """
-    # Handle special case mapping
-    if issue == "Active Rental Debt":
-        mapped_issue = "Broken Lease"
-        id_selector = "#ctl00_ContentPlaceHolder_eviction_notPaidOff"
-    else:
-        mapped_issue = issue
-        id_selector = None
-    if mapped_issue is None or \
-   (isinstance(mapped_issue, str) and (mapped_issue.strip() == "" or 'none' in mapped_issue.lower())) or \
-   (isinstance(mapped_issue, list) and (len(mapped_issue) == 0 or any('none' in str(x).lower() for x in mapped_issue))):
-        pwrite(f"[WARN] No mapping found for issue: {issue}")
+def select_background_issues(page, issues):
+
+    if isinstance(issues, str):
+        issues = [issues]
+
+    if not issues:
+        pwrite("[WARN] No issues provided")
         return
 
-    locator = page.locator(f'//input[@type="checkbox" and @value="{mapped_issue}"]')
-    if locator.count() > 0:
-        locator.first.click()
-        pwrite(f"[OK] Selected background issue: {mapped_issue}")
+    for issue in issues:
+        if not issue or str(issue).strip() == "" or "none" in str(issue).lower():
+            continue
 
-        # Click additional element if defined
-        if id_selector:
-            page.locator(id_selector).click()
-            pwrite(f"[OK] Selected related checkbox: {id_selector}")
-    else:
-        pwrite(f"[WARN] No checkbox found for: {mapped_issue}")
+        # Handle special mapping
+        if issue == "Active Rental Debt":
+            mapped_issue = "Broken Lease"
+            id_selector = "#ctl00_ContentPlaceHolder_eviction_notPaidOff"
+        else:
+            mapped_issue = issue
+            id_selector = None
+
+        locator = page.locator(f'//input[@type="checkbox" and @value="{mapped_issue}"]')
+
+        if locator.count() > 0:
+            locator.first.click()
+            pwrite(f"[OK] Selected background issue: {mapped_issue}")
+
+            if id_selector:
+                page.locator(id_selector).click()
+                pwrite(f"[OK] Selected related checkbox: {id_selector}")
+        else:
+            pwrite(f"[WARN] No checkbox found for: {mapped_issue} and xpath {f"//input[@type='checkbox' and @value='{mapped_issue}']"}")
 
 
 
@@ -392,43 +432,123 @@ def select_properties(page, MAX_SELECT=20, has_eviction=None, has_background_iss
 
     return len(selected)
 PROPERTY_AMENITIES_MAP = {
-    "Swimming Pool": ["Swimming Pool"],
-    "Gym/Fitness Center": ["Fitness Center"],
-    "Elevators": ["Elevators"],
-    "Valet Parking": ["Valet Parking"],
-    "Parking Garage Lot": ["Parking Garage Lot"],
-    "Reserved Spaces": ["Reserved Spaces"],
-    "Attached Private Garage": ["Attached Private Garage"],
-    "Electric Car Charger": ["Electric Car Charging Stations"],
-    "Pet Washing Stations": ["Pet Washing Stations"],
-    "Doorman": ["Doorman"],
-    "Golf Course": ["Golf Course", "Golf Simulator"],
+    # High Value
+    "Locker Systems": ["Locker Systems"],
+    "Package Services": ["Package Services"],
+    "Wi-Fi Access": ["Wi-Fi Access", "Wifi Access"],
+    "Concierge Services": ["Concierge Services"],
+    "Rooftop Amenities": ["Rooftop Amenities"],
+    "Virtual Fitness": ["Virtual Fitness"],
     "Smoke Free Community": ["Smoke Free Community"],
-    "Gated with access code": ["Gated with access code"],
-    "Onsite Laundry Rooms": ["Laundry Rooms"],
+    "Gameroom": ["Gameroom", "Game Room"],
+    "Outdoor Kitchens": ["Outdoor Kitchens"],
+    "Dry Cleaning / Laundry Services": ["Dry Cleaning / Laundry Services", "Dry Cleaning/Laundry Services"],
+    "Co-Working Area": ["Co-Working Area", "Co Working Area"],
+    "Doorman": ["Doorman"],
+    "Fiber optic lines": ["Fiber optic lines", "Fiber Optic Lines"],
+    "Pet Washing Stations": ["Pet Washing Stations"],
+    "Bike Storage": ["Bike Storage"],
+    "Valet Parking": ["Valet Parking"],
+    "Yellow Rooms": ["Yellow Rooms"],
+    "Electric Car Charging Stations": ["Electric Car Charging Stations", "Electric Car Charger"],
+    "Ride Sharing Lounge": ["Ride Sharing Lounge"],
+    "Recycling": ["Recycling"],
+    "Golf Simulator": ["Golf Simulator"],
+
+    # Fitness & Sports
+    "Basketball Courts": ["Basketball Courts"],
+    "Golf Course": ["Golf Course"],
+    "Tennis Court": ["Tennis Court"],
+    "Swimming Pool": ["Swimming Pool"],
+    "Racquetball Court": ["Racquetball Court"],
+    "Volleyball Court": ["Volleyball Court"],
+    "Jogging Trail": ["Jogging Trail"],
+    "Fitness Center": ["Fitness Center", "Gym/Fitness Center"],
+
+    # Private Parking
+    "Attached Private Garage": ["Attached Private Garage"],
+    "Detached Private Garage": ["Detached Private Garage"],
+
+    # Shared Parking
+    "Reserved Spaces": ["Reserved Spaces"],
+    "Parking Garage Lot": ["Parking Garage Lot"],
+    "Covered Spaces": ["Covered Spaces"],
+    "Breezeway Parking": ["Breezeway Parking"],
+
+    # Entertainment
+    "Picnic Area": ["Picnic Area"],
+    "Billiard Room": ["Billiard Room"],
+    "Clubhouse": ["Clubhouse"],
+    "Playground": ["Playground"],
+    "Spa/Jacuzzi": ["Spa/Jacuzzi", "Spa / Jacuzzi"],
+    "Cinema Room": ["Cinema Room"],
+
+    # Other
+    "Valet Trash Service": ["Valet Trash Service"],
+    "Dog/Walk Trail": ["Dog/Walk Trail", "Dog Walk Trail"],
+    "Laundry Rooms": ["Laundry Rooms", "Onsite Laundry Rooms"],
+    "Roommate Floorplans": ["Roommate Floorplans"],
+
+    # Accessibility
+    "School Bus Pickup": ["School Bus Pickup"],
+    "On Shuttle/Bus Route": ["On Shuttle/Bus Route"],
+    "Elevators": ["Elevators"],
     "Handicap Friendly": ["Handicap Friendly"],
+
+    # Safety
+    "Gated with access code": ["Gated with access code"],
+    "Fenced Yards": ["Fenced Yards"],
+    "Fenced Community": ["Fenced Community"],
 }
 
 UNIT_AMENITIES_MAP = {
-    "Washer/Dryer supplied": ["Fullsize - supplied", "Stackable - supplied"],
-    "Patio/ Balcony": ["Patio"],
-    "Wood Floors": ["Wood Floors"],
-    "Washer/Dryer connexs": ["Fullsize - connections", "Stackable - connections"],
-    "Vinyl /Laminate Floors": ["Vinyl Flooring", "Laminate Floors"],
-    "Stained Concrete Floors": ["Stained Concrete Floors"],
-    "Dishwasher": ["Dishwasher"],
+    # High Value
+    "Smart Technology In Unit": ["Smart Technology In Unit"],
+    "Vinyl Flooring": ["Vinyl Flooring", "Vinyl /Laminate Floors", "Vinyl/Laminate Floors"],
     "Gas Appliances": ["Gas Appliances"],
-    "Granite Counters": ["Granite Counters"],
-    "Marble Countertops": ["Marble Countertops"],
-    "Quartz Countertops": ["Quartz Countertops"],
     "Kitchen Islands": ["Kitchen Islands"],
-    "Garden Tubs": ["Garden Tubs"],
+    "Quartz Countertops": ["Quartz Countertops"],
+    "Marble Countertops": ["Marble Countertops"],
+    "Tile Backsplash": ["Tile Backsplash"],
+    "High Ceilings": ["High Ceilings"],
+    "USB outlets": ["USB outlets", "USB Outlets"],
     "Walk-in Shower": ["Walk-in Shower"],
+
+    # Washer/Dryer
+    "Fullsize - connections": ["Fullsize - connections", "Fullsize - Connections"],
+    "Fullsize - supplied": ["Fullsize - supplied", "Fullsize - Supplied"],
+    "Stackable - connections": ["Stackable - connections", "Stackable - Connections"],
+    "Stackable - supplied": ["Stackable - supplied", "Stackable - Supplied"],
+
+    # Kitchen
+    "Microwave": ["Microwave"],
+    "Dishwasher": ["Dishwasher"],
+    "Pantry": ["Pantry"],
+    "Granite Counters": ["Granite Counters"],
+    "Black/Stainless Appliances": ["Black/Stainless Appliances"],
+
+    # Living
+    "Walk-in Closet": ["Walk-in Closet"],
+    "Patio": ["Patio", "Patio/ Balcony", "Patio/Balcony"],
+    "Outside Storage": ["Outside Storage"],
+    "Bay Windows": ["Bay Windows"],
+    "Dry/Wet Bar": ["Dry/Wet Bar"],
+
+    # Comfort & Safety
+    "Furnished Unit": ["Furnished Unit"],
     "Fireplace": ["Fireplace"],
+    "Wood Floors": ["Wood Floors"],
+    "Garden Tubs": ["Garden Tubs"],
+    "Laminate Floors": ["Laminate Floors"],
+    "Alarm System": ["Alarm System"],
+    "Ceramic Tile": ["Ceramic Tile"],
+    "Ceiling Fans": ["Ceiling Fans"],
+    "Stained Concrete Floors": ["Stained Concrete Floors"],
 }
 
 
 def smart_data_to_website_label(smart_value, amenity_map):
+    """Case-insensitive translation from Smart Apartment Data value to Website label."""
     smart_value_lower = smart_value.lower().strip()
     for website_label, smart_values in amenity_map.items():
         for sv in smart_values:
@@ -438,22 +558,42 @@ def smart_data_to_website_label(smart_value, amenity_map):
 
 
 def click_amenities(page, amenities_list, amenity_map):
+    """Click amenity checkboxes using case-insensitive label matching."""
+    if not amenities_list:
+        pwrite("[SKIP] No amenities provided")
+        return
+
     for smart_value in amenities_list:
+        smart_value = smart_value.strip()
         website_label = smart_data_to_website_label(smart_value, amenity_map)
 
         if website_label is None:
-            pwrite(f"No mapping found for: {smart_value}, trying direct match")
-            website_label = smart_value  # fallback to direct match
+            pwrite(f"[NOT MAPPED] {smart_value}, trying direct match")
+            website_label = smart_value
 
-        # Build XPath and click
-        xpath = f'//label[normalize-space()="{website_label}"]'
-        try:
-            locator = page.locator(f'xpath={xpath}')
-            if locator.count() > 0:
-                locator.first.click()
-                pwrite(f"✅ Clicked: {website_label} (from: {smart_value})")
-            else:
-                pwrite(f"❌ Not found on page: {website_label} (from: {smart_value})")
-        except Exception as e:
-            pwrite(f"❌ Error clicking {website_label}: {e}")
-        time.sleep(0.3)
+        # Build list of variants to try (all from map + website_label itself)
+        all_variants = amenity_map.get(website_label, [website_label])
+        all_variants = [website_label] + [v for v in all_variants if v != website_label]
+
+        clicked = False
+        for variant in all_variants:
+            # Case-insensitive XPath using translate()
+            variant_lower = variant.lower()
+            xpath = (
+                f'//label[translate(normalize-space(.), '
+                f'"ABCDEFGHIJKLMNOPQRSTUVWXYZ", '
+                f'"abcdefghijklmnopqrstuvwxyz")="{variant_lower}"]'
+            )
+            try:
+                locator = page.locator(f'xpath={xpath}')
+                if locator.count() > 0:
+                    locator.first.click()
+                    pwrite(f"[OK] Clicked: {variant} (from: {smart_value})")
+                    clicked = True
+                    break
+            except Exception as e:
+                pwrite(f"[ERROR] clicking variant {variant}: {e}")
+                continue
+
+        if not clicked:
+            pwrite(f"[NOT FOUND] {website_label} (from: {smart_value}) — tried: {all_variants}")

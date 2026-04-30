@@ -13,6 +13,14 @@
 - Fix for selecting background issues
 - Improved logging system
 ---
+### Updates to MAKE.COM
+
+- Updated scenario "Call Properties 48 hours before client preferred tour date" from 24 hours to 48 hours
+- Updated scenario "[Retry at 2:30 pm] Call Properties 48 hours before client preferred tour date" from 24 hours to 48 hours
+- Updated scenario "[Retry at 2:00 pm] Call Properties 48 hours before client preferred tour date" from 24 hours to 48 hours
+- Updated scenario "[Retry at 10:30 am] Call Properties 48 hours before client preferred tour date (copy)" from 24 hours to 48 hours
+- Fixed an issue in the “Send Notes to Clients” scenario on Make.com where name matching was case-sensitive. Updated the logic to normalize both contact names and record names to lowercase, ensuring accurate and consistent filtering.
+---
 
 ### Issues Identified in the Current RPA Implementation
 
